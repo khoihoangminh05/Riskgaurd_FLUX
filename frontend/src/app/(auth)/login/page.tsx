@@ -14,20 +14,8 @@ export default function LoginPage() {
 
     const onSubmit = async (data: any) => {
         try {
-            const response = await login(data.email, data.password);
-            console.log("🚨 DEBUG API RESPONSE:", response);
-
-            // Check where the flag actually is based on backend output
-            const isSetup = response?.isSetupComplete ?? response?.company?.isSetupComplete ?? false;
-            console.log("👉 isSetup status:", isSetup);
-
-            if (isSetup) {
-                console.log("👉 Going to Dashboard");
-                router.push('/dashboard');
-            } else {
-                console.log("👉 Going to Ingest");
-                router.push('/ingest');
-            }
+            await login(data.email, data.password);
+            router.push('/dashboard');
         } catch (error) {
             console.error("🚨 LOGIN ERROR:", error);
             // Error handling is managed by AuthContext toasts

@@ -16,7 +16,7 @@ export class AnalysisProcessor {
         this.logger.log(`Starting daily risk analysis for company ${companyId}...`);
 
         try {
-            await this.riskEngineService.analyzeNews(companyId);
+            await this.riskEngineService.executeRiskAnalysisPipeline(companyId);
             this.logger.log(`Daily risk analysis for company ${companyId} completed.`);
         } catch (error) {
             this.logger.error(`Daily risk analysis for company ${companyId} failed: ${error.message}`);

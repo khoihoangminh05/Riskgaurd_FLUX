@@ -19,7 +19,8 @@ class AgentState(TypedDict):
     risk_profile: dict
     internal_context: List[str]
     urls: List[str]
-    articles: List[dict] # {url: str, text: str, title: str}
+    raw_news: List[dict]
+    verified_news: List[dict]
     analysis: dict
 
 # --- Tools ---
@@ -89,17 +90,64 @@ def scrape_node(state: AgentState):
 
     print("Found URLs:", articles_data)
             
-    return {"articles": articles_data}
+    return {"raw_news": articles_data}
+
+def fact_check_node(state: AgentState):
+    company = state.get("company_name", "")
+    raw_news = state.get("raw_news", [])
+    
+    trusted_domains = [
+        "reuters.com", "bloomberg.com", "wsj.com", "cnbc.com", 
+        "ft.com", "marketwatch.com", "forbes.com", "finance.yahoo.com",
+        "nytimes.com", "businesswire.com", "prnewswire.com", "sec.gov"
+    ]
+    
+    verified_news = []
+    
+    # 1. Very fast LLM evaluation for non-trusted domains (optional, but requested for credibility)
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        google_api_key=settings.GOOGLE_API_KEY,
+        temperature=0
+    )
+    
+    for article in raw_news:
+        url = article.get("url", "").lower()
+        title = article.get("title", "")
+        
+        # Fast domain check bypass
+        if any(domain in url for domain in trusted_domains):
+            print(f"Fact Checker: Auto-trusted {url}")
+            verified_news.append(article)
+            continue
+            
+        print(f"Fact Checker: Evaluating unknown source {url}")
+        try:
+            prompt = f"""
+            You are a Financial News Fact Checker. Evaluate quickly if this article appears to be a credible and relevant news piece about '{company}'.
+            Ignore spam, seo content, or entirely unrelated topics.
+            URL: {url}
+            Title: {title}
+            Is this credible and relevant? Reply ONLY with 'YES' or 'NO'.
+            """
+            response = llm.invoke(prompt)
+            if "YES" in response.content.upper():
+                verified_news.append(article)
+        except Exception as e:
+            print(f"Fact check LLM failed for {url}: {e}")
+            
+    print(f"Fact Checker: Retained {len(verified_news)} out of {len(raw_news)} raw articles.")
+    return {"verified_news": verified_news}
 
 async def augment_node(state: AgentState):
     company_id = state.get("company_id")
-    articles = state.get("articles", [])
+    articles = state.get("verified_news", [])
     internal_context = []
     
     if not company_id:
         return {"internal_context": []}
         
-    print(f"Retrieving context for {len(articles)} articles...")
+    print(f"Retrieving context for {len(articles)} verified articles...")
     for article in articles:
         try:
             # Step 2: RAG Context Retrieval
@@ -114,7 +162,7 @@ async def augment_node(state: AgentState):
 
 def analyze_node(state: AgentState):
     company = state["company_name"]
-    articles = state.get("articles", [])
+    articles = state.get("verified_news", [])
     internal_context = state.get("internal_context", [])
     
     if not articles:
@@ -188,12 +236,14 @@ workflow = StateGraph(AgentState)
 
 workflow.add_node("search", search_node)
 workflow.add_node("scrape", scrape_node)
+workflow.add_node("fact_check", fact_check_node)
 workflow.add_node("augment", augment_node)
 workflow.add_node("analyze", analyze_node)
 
 workflow.set_entry_point("search")
 workflow.add_edge("search", "scrape")
-workflow.add_edge("scrape", "augment")
+workflow.add_edge("scrape", "fact_check")
+workflow.add_edge("fact_check", "augment")
 workflow.add_edge("augment", "analyze")
 workflow.add_edge("analyze", END)
 

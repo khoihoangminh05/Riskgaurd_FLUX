@@ -11,7 +11,6 @@ class InternalQueryRequest(BaseModel):
 @router.post("/analyze/internal-query")
 async def analyze_internal_query(request: InternalQueryRequest):
     try:
-        print(request.company_id + " " + request.query)
         result = await risk_analyst_agent.answer_query(
             company_id=request.company_id,
             query=request.query

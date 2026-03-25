@@ -96,4 +96,28 @@ export class FinancialStatement {
 
     @Column({ type: 'jsonb', nullable: true, name: 'raw_data' })
     rawData: any;
+
+    @Column({ type: 'decimal', precision: 20, scale: 2, transformer: new ColumnNumericTransformer(), nullable: true, name: 'cash_runway' })
+    cashRunway: Decimal;
+
+    @Column({ type: 'decimal', precision: 20, scale: 2, transformer: new ColumnNumericTransformer(), nullable: true, name: 'burn_rate' })
+    burnRate: Decimal;
+
+    @Column({ type: 'decimal', precision: 20, scale: 2, transformer: new ColumnNumericTransformer(), nullable: true, name: 'quick_ratio' })
+    quickRatio: Decimal;
+
+    @Column({ type: 'decimal', precision: 20, scale: 2, transformer: new ColumnNumericTransformer(), nullable: true, name: 'debt_to_equity' })
+    debtToEquity: Decimal;
+
+    @Column({ type: 'decimal', precision: 20, scale: 2, transformer: new ColumnNumericTransformer(), nullable: true, name: 'interest_coverage' })
+    interestCoverage: Decimal;
+
+    @Column({ type: 'decimal', precision: 20, scale: 2, transformer: new ColumnNumericTransformer(), nullable: true, name: 'gross_margin' })
+    grossMargin: Decimal;
+
+    @Column({ type: 'decimal', precision: 20, scale: 2, transformer: new ColumnNumericTransformer(), nullable: true, name: 'inventory_turnover' })
+    inventoryTurnover: Decimal;
+
+    @Column({ type: 'decimal', precision: 20, scale: 2, transformer: new ColumnNumericTransformer(), nullable: true, name: 'operating_cash_flow' })
+    operatingCashFlow: Decimal;
 }

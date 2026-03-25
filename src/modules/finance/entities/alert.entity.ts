@@ -4,6 +4,7 @@ import {
     Column,
     ManyToOne,
     JoinColumn,
+    CreateDateColumn
 } from 'typeorm';
 import { Company } from './company.entity';
 
@@ -31,9 +32,15 @@ export class Alert {
     })
     severity: AlertSeverity;
 
+    @CreateDateColumn({ name: 'created_at' })
+    createdAt: Date;
+
     @Column()
     message: string;
 
     @Column({ name: 'is_resolved', default: false })
     isResolved: boolean;
+
+    @Column({ name: 'is_important', default: false })
+    isImportant: boolean;
 }

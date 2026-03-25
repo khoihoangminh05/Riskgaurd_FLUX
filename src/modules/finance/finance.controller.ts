@@ -1,4 +1,5 @@
-import { Controller, Post, Body, Get, Param, NotFoundException, UseInterceptors, UploadedFile, Delete } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, NotFoundException, UseInterceptors, UploadedFile, Delete, Req, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CompanyDocument, DocumentStatus } from './entities/company-document.entity';
 import { IngestFinancialDataDto } from './dto/ingest-financial-data.dto';
@@ -9,6 +10,7 @@ import { Repository } from 'typeorm';
 import { FinancialStatement } from './entities/financial-statement.entity';
 import Decimal from 'decimal.js';
 import { RiskScore } from './entities/risk-score.entity';
+import { RiskScoreHistory } from './entities/risk-score-history.entity';
 import { Alert } from './entities/alert.entity';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -25,28 +27,41 @@ export class FinanceController {
         private readonly statementRepo: Repository<FinancialStatement>,
         @InjectRepository(RiskScore)
         private readonly riskScoreRepo: Repository<RiskScore>,
+        @InjectRepository(RiskScoreHistory)
+        private readonly riskScoreHistoryRepo: Repository<RiskScoreHistory>,
         @InjectRepository(Alert)
         private readonly alertRepo: Repository<Alert>,
         @InjectRepository(CompanyDocument)
         private readonly documentRepo: Repository<CompanyDocument>,
     ) { }
 
+    @UseGuards(JwtAuthGuard)
     @Post('ingest')
-    async ingestData(@Body() dto: IngestFinancialDataDto) {
-        // 1. Find or Create Company
-        let company = await this.companyRepo.findOne({ where: { ticker: dto.ticker } });
-        if (!company) {
-            company = this.companyRepo.create({
-                ticker: dto.ticker,
-                name: dto.companyName,
-                industry: dto.industry || 'Unknown',
-                sector: dto.sector || 'Unknown',
-            });
-            await this.companyRepo.save(company);
+    async ingestData(@Req() req, @Body() dto: IngestFinancialDataDto) {
+        const user = req.user;
+        let company;
+
+        // SECURITY CHECK: If user already has a company, ONLY use their token's companyId
+        if (user.companyId) {
+            company = await this.companyRepo.findOne({ where: { id: user.companyId } });
+            if (!company) {
+                throw new NotFoundException('Authenticated user company not found in database.');
+            }
+        } else {
+            // First time setup: Find by ticker or Create New Company
+            company = await this.companyRepo.findOne({ where: { ticker: dto.ticker } });
+            if (!company) {
+                company = this.companyRepo.create({
+                    ticker: dto.ticker,
+                    name: dto.companyName,
+                    industry: dto.industry || 'Unknown',
+                    sector: dto.sector || 'Unknown',
+                });
+                await this.companyRepo.save(company);
+            }
         }
 
-        // 2. Save Financial Statement
-        // Check if exists to update or create new
+        // 2. Save Financial Statement (Using securely determined company.id)
         let statement = await this.statementRepo.findOne({
             where: { companyId: company.id, period: dto.period },
         });
@@ -91,49 +106,71 @@ export class FinanceController {
             throw new NotFoundException(`Company with ticker ${ticker} not found`);
         }
 
-        // Latest Score
+        // Latest Static Score (For radial charts / base metrics)
         const latestScore = await this.riskScoreRepo.findOne({
             where: { companyId: company.id },
-            order: { period: 'DESC' }, // Assuming string period sorts lexically correct for now, or just latest inserted
+            order: { period: 'DESC' },
         });
 
-        // History Charts (All scores)
-        const history = await this.riskScoreRepo.find({
+        // Dynamic History Charts (Time-series)
+        const dynamicHistoryRaw = await this.riskScoreHistoryRepo.find({
             where: { companyId: company.id },
-            order: { period: 'ASC' },
+            order: { createdAt: 'ASC' },
         });
 
-        // Alerts
-        const alerts = await this.alertRepo.find({
-            where: { companyId: company.id },
-            order: { isResolved: 'ASC', severity: 'DESC' }, // Unresolved first, then High severity
-        });
+        // Map to format frontend expects (using original totalScore field structure)
+        const history = dynamicHistoryRaw.map(h => ({
+            id: h.id,
+            companyId: h.companyId,
+            period: h.createdAt.toISOString(), // using precise timestamp
+            totalScore: h.totalDynamicScore,
+            profitabilityScore: h.baseFinancialScore, // Re-using this to show base vs dynamic diff on UI if needed
+            createdAt: h.createdAt.toISOString()
+        }));
 
         return {
             company,
             latest_score: latestScore,
             history_charts: history,
-            alerts,
         };
     }
 
-    @Post('analyze-news')
-    async analyzeNews(@Body() body: { ticker: string; companyName: string }) {
-        // 1. Tái sử dụng logic: Tìm hoặc Tạo công ty (Giống hệt hàm ingest)
-        let company = await this.companyRepo.findOne({ where: { ticker: body.ticker } });
-
+    @Get(':companyId/dashboard-metrics')
+    async getDashboardMetrics(@Param('companyId') companyId: string) {
+        const company = await this.companyRepo.findOne({ where: { id: companyId } });
         if (!company) {
-            company = this.companyRepo.create({
-                ticker: body.ticker,
-                name: body.companyName,
-                industry: 'Unknown', // Mặc định vì tin tức chưa chắc có info này
-                sector: 'Unknown',
-            });
-            await this.companyRepo.save(company);
+            throw new NotFoundException(`Company with ID ${companyId} not found`);
+        }
+        return this.getDashboard(company.ticker);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Post('analyze-news')
+    async analyzeNews(@Req() req, @Body() body: { ticker: string; companyName: string }) {
+        const user = req.user;
+        let company;
+
+        if (user.companyId) {
+            company = await this.companyRepo.findOne({ where: { id: user.companyId } });
+        } else {
+            company = await this.companyRepo.findOne({ where: { ticker: body.ticker } });
+            if (!company) {
+                company = this.companyRepo.create({
+                    ticker: body.ticker,
+                    name: body.companyName,
+                    industry: 'Unknown',
+                    sector: 'Unknown',
+                });
+                await this.companyRepo.save(company);
+            }
         }
 
-        // 2. Có ID rồi thì mới gọi Service để phân tích
-        return this.riskEngine.analyzeNews(company.id);
+        if (!company) {
+            throw new NotFoundException('Company not found and could not be verified.');
+        }
+
+        // 2. Co ID roi thi moi goi Service de phan tich
+        return this.riskEngine.executeRiskAnalysisPipeline(company.id);
     }
 
     @Post(':companyId/upload-doc')
@@ -215,5 +252,14 @@ export class FinanceController {
         }
         await this.riskEngine.deleteDocument(companyId, documentId);
         return { message: 'Document and associated knowledge deleted successfully' };
+    }
+
+    @Post('extract/:companyId')
+    async extractMetricsFromLatestReport(@Param('companyId') companyId: string) {
+        const company = await this.companyRepo.findOne({ where: { id: companyId } });
+        if (!company) {
+            throw new NotFoundException(`Company ${companyId} not found`);
+        }
+        return this.riskEngine.extractMetricsFromLatestReport(companyId);
     }
 }

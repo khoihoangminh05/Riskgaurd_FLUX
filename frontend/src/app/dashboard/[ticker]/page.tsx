@@ -14,9 +14,9 @@ import {
     RadialBarChart,
     RadialBar,
     Legend,
+    Brush,
 } from 'recharts';
 import { AlertTriangle, TrendingUp, TrendingDown, DollarSign, Activity } from 'lucide-react';
-import RiskChatBot from '@/components/RiskChatBot';
 
 export default function Dashboard() {
     const { ticker } = useParams<{ ticker: string }>();
@@ -37,6 +37,18 @@ export default function Dashboard() {
 
     const { company, latest_score, history_charts, alerts } = data;
     const metrics = latest_score.details.metrics;
+
+    const formattedHistory = (history_charts || []).map(item => {
+        let displayDate = item.period;
+        if (item.createdAt) {
+            const date = new Date(item.createdAt);
+            displayDate = date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+        return {
+            ...item,
+            displayDate
+        };
+    });
 
     const scoreColor = (score: number) => {
         if (score > 70) return '#10b981'; // Emerald 500
@@ -105,7 +117,7 @@ export default function Dashboard() {
                         </h3>
                         <div className="h-[300px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={history_charts}>
+                                <AreaChart data={formattedHistory}>
                                     <defs>
                                         <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
                                             <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
@@ -117,15 +129,22 @@ export default function Dashboard() {
                                         </linearGradient>
                                     </defs>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                                    <XAxis dataKey="period" stroke="#666" />
-                                    <YAxis stroke="#666" />
+                                    <XAxis dataKey="displayDate" stroke="#666" fontSize={12} dy={10} tickLine={false} axisLine={false} />
+                                    <YAxis stroke="#666" fontSize={12} tickLine={false} axisLine={false} />
                                     <Tooltip
-                                        contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', color: '#fff' }}
+                                        contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', color: '#fff', borderRadius: '12px' }}
                                         itemStyle={{ color: '#e4e4e7' }}
                                     />
-                                    <Legend />
-                                    <Area type="monotone" dataKey="totalScore" stroke="#3b82f6" fillOpacity={1} fill="url(#colorScore)" name="Risk Score" />
-                                    <Area type="monotone" dataKey="profitabilityScore" stroke="#10b981" fillOpacity={1} fill="url(#colorIncome)" name="Profitability Score" />
+                                    <Legend verticalAlign="top" height={36} />
+                                    <Area type="monotone" dataKey="totalScore" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorScore)" name="Risk Score" />
+                                    <Area type="monotone" dataKey="profitabilityScore" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorIncome)" name="Profitability Score" />
+                                    <Brush 
+                                        dataKey="displayDate" 
+                                        height={30} 
+                                        stroke="#3b82f6" 
+                                        fill="#18181b"
+                                        tickFormatter={(tick) => tick.split(',')[0]} 
+                                    />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
@@ -136,9 +155,6 @@ export default function Dashboard() {
 
                 {/* Sidebar */}
                 <div className="space-y-8">
-
-                    {/* Chat Widget */}
-                    <RiskChatBot companyId={company.id} companyName={company.name} />
 
                     {/* Radial Risk Chart */}
                     <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 flex flex-col items-center justify-center">

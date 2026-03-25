@@ -5,6 +5,7 @@ import {
     ManyToOne,
     OneToMany,
     JoinColumn,
+    CreateDateColumn,
 } from 'typeorm';
 import { Company } from './company.entity';
 import { RiskEvent } from './risk-event.entity';
@@ -15,6 +16,9 @@ import Decimal from 'decimal.js';
 export class RiskScore {
     @PrimaryGeneratedColumn('uuid')
     id: string;
+
+    @CreateDateColumn({ name: 'created_at' })
+    createdAt: Date;
 
     @Column({ name: 'company_id' })
     companyId: string;

@@ -16,8 +16,6 @@ export class RiskProfileController {
         @Param('companyId', ParseUUIDPipe) companyId: string,
         @Body() dto: UpdateRiskProfileDto,
     ) {
-        console.log(dto);
-        console.log(companyId);
         return this.riskProfileService.upsertProfile(companyId, dto);
     }
 }

@@ -9,7 +9,10 @@ import { toast } from 'sonner';
 interface Company {
     id: string;
     ticker: string;
-    isSetupComplete: boolean;
+    name?: string;
+    industry?: string;
+    sector?: string;
+    isSetupComplete?: boolean;
 }
 
 interface User {
@@ -26,6 +29,7 @@ interface AuthContextType {
     login: (email: string, password: string) => Promise<User>;
     register: (data: any) => Promise<void>;
     logout: () => void;
+    updateCompany: (updatedCompany: Company) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -92,8 +96,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         toast.info('Logged out');
     };
 
+    const updateCompany = (updatedCompany: Company) => {
+        if (user) {
+            const newUser = { ...user, company: updatedCompany };
+            setUser(newUser);
+            localStorage.setItem('user', JSON.stringify(newUser));
+        }
+    };
+
     return (
-        <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+        <AuthContext.Provider value={{ user, loading, login, register, logout, updateCompany }}>
             {children}
         </AuthContext.Provider>
     );

@@ -47,6 +47,26 @@ export interface Company {
     name: string;
     sector: string;
     industry: string;
+    isSetupComplete?: boolean;
+    cashRunway?: number;
+    burnRate?: number;
+    quickRatio?: number;
+    debtEquityRatio?: number;
+    interestCoverageRatio?: number;
+    grossProfitMargin?: number;
+    inventoryTurnover?: number;
+    operatingCashFlow?: number;
+}
+
+export interface FinancialMetrics {
+    cashRunway?: number;
+    burnRate?: number;
+    quickRatio?: number;
+    debtEquityRatio?: number;
+    interestCoverageRatio?: number;
+    grossProfitMargin?: number;
+    inventoryTurnover?: number;
+    operatingCashFlow?: number;
 }
 
 export interface FinancialStatement {
@@ -77,6 +97,7 @@ export interface RiskScore {
         is_insolvent: boolean;
     };
     companyId: string;
+    createdAt: string;
 }
 
 export interface Alert {
@@ -86,6 +107,18 @@ export interface Alert {
     message: string;
     isResolved: boolean;
     createdAt: string;
+}
+
+export interface RiskEvent {
+    id: string;
+    companyId: string;
+    title: string;
+    summary: string;
+    sentiment: 'Bullish' | 'Bearish' | 'Neutral';
+    riskScoreValue: number;
+    sourceUrl: string;
+    tags: string[];
+    publishedAt: string;
 }
 
 export interface DashboardData {
@@ -159,6 +192,11 @@ export const financeApi = {
         return response.data;
     },
 
+    getDashboardMetrics: async (companyId: string) => {
+        const response = await apiInstance.get<DashboardData>(`/finance/${companyId}/dashboard-metrics`);
+        return response.data;
+    },
+
     // 3. Analyze News
     analyzeNews: async (ticker: string, companyName: string) => {
         const response = await apiInstance.post('/finance/analyze-news', { ticker, companyName });
@@ -207,5 +245,101 @@ export const financeApi = {
     saveRiskProfile: async (companyId: string, data: UpdateRiskProfileDto) => {
         const response = await apiInstance.post<RiskProfile>(`/finance/${companyId}/risk-profile`, data);
         return response.data;
+    },
+
+    // 9. Get Alerts (Dedicated Alert Controller)
+    getAlerts: async (companyId: string) => {
+        const response = await apiInstance.get<Alert[]>(`/alerts/${companyId}`);
+        return response.data;
+    },
+
+    // 10. Create Mock Alert (Hackathon Simulation)
+    createMockAlert: async (companyId: string, severity: string, message: string) => {
+        const response = await apiInstance.post<Alert>('/alerts/mock', { companyId, severity, message });
+        return response.data;
+    },
+
+    // --- New Alert Management Methods ---
+    triggerFullAnalysis: async (companyId: string) => {
+        const response = await apiInstance.post(`/alerts/trigger-analysis/${companyId}`);
+        return response.data;
+    },
+
+    deleteAlert: async (alertId: string) => {
+        const response = await apiInstance.delete(`/alerts/${alertId}`);
+        return response.data;
+    },
+
+    toggleAlertImportance: async (alertId: string) => {
+        const response = await apiInstance.patch<Alert>(`/alerts/${alertId}/important`);
+        return response.data;
+    },
+
+    // 11. Get Market Intelligence (Historical Risk Events)
+    getMarketIntelligence: async (companyId: string) => {
+        const response = await apiInstance.get<RiskEvent[]>(`/finance/${companyId}/market-intelligence`);
+        return response.data;
+    },
+
+    // 12. Get Competitors (Rich Objects)
+    getCompetitors: async (companyId: string) => {
+        const response = await apiInstance.get<any[]>(`/finance/${companyId}/competitors`);
+        return response.data;
+    },
+
+    // 13. Get Predictions / Forecasting
+    getPredictions: async (companyId: string) => {
+        const response = await apiInstance.get<any>(`/finance/${companyId}/predictions`);
+        return response.data;
+    },
+
+    updateCompanyDetails: async (companyId: string, data: { 
+        name?: string; 
+        ticker?: string; 
+        industry?: string; 
+        sector?: string;
+        cashRunway?: number;
+        burnRate?: number;
+        quickRatio?: number;
+        debtEquityRatio?: number;
+        interestCoverageRatio?: number;
+        grossProfitMargin?: number;
+        inventoryTurnover?: number;
+        operatingCashFlow?: number;
+    }) => {
+        const response = await apiInstance.patch<Company>(`/companies/${companyId}`, data);
+        return response.data;
+    },
+
+    // 15. Get Dynamic Risk Score
+    getDynamicRiskScore: async (companyId: string) => {
+        const response = await apiInstance.get<{ currentScore: number; baseScore: number; alertPenalty: number }>(`/companies/${companyId}/risk-score`);
+        return response.data;
+    },
+
+    // 16. Get Financial Metrics
+    getFinancialMetrics: async (companyId: string) => {
+        const response = await apiInstance.get<FinancialMetrics>(`/companies/${companyId}/metrics`);
+        return response.data;
+    },
+
+    // 17. Update Financial Metrics
+    updateFinancialMetrics: async (companyId: string, data: FinancialMetrics) => {
+        const response = await apiInstance.patch<Company>(`/companies/${companyId}/metrics`, data);
+        return response.data;
+    },
+
+    // 18. Trigger AI Auto-Extract
+    triggerAIExtraction: async (companyId: string) => {
+        const response = await apiInstance.post(`/finance/extract/${companyId}`);
+        return response.data;
+    },
+
+    // 19. Get Risk Chart History
+    getRiskChartHistory: async (companyId: string) => {
+        const response = await apiInstance.get<DashboardData>(`/finance/${companyId}/dashboard-metrics`);
+        return response.data.history_charts || [];
     }
 };
+
+export default financeApi;

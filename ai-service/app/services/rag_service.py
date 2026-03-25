@@ -15,23 +15,32 @@ embeddings = GoogleGenerativeAIEmbeddings(
     google_api_key=settings.GOOGLE_API_KEY
 )
 
-# Initialize Vector Store
-# connection_string = settings.DATABASE_URL
-# vector_store = PGVector(
-#     embeddings=embeddings,
-#     collection_name="document_embeddings",
-#     connection=connection_string,
-#     use_jsonb=True,
-# )
+# Initialize Vector Store Engine/Connection
+connection_string = settings.DATABASE_URL
+engine = create_engine(connection_string)
+
+# We initialize PGVector to wrap the same embeddings and database
+vector_store = PGVector(
+    embeddings=embeddings,
+    collection_name="document_embeddings",
+    connection=engine,
+    use_jsonb=True,
+)
 
 class RAGService:
     @staticmethod
     async def ingest_document(file_path: str, company_id: str, document_id: str):
-        # 1. Load Document
+        import datetime
+        current_year = datetime.datetime.now().year
+        
+        # Determine doc_type
+        doc_type = "unknown"
         if file_path.endswith(".pdf"):
             loader = UnstructuredPDFLoader(file_path)
+            doc_type = "pdf"
         elif file_path.endswith(".xlsx") or file_path.endswith(".xls"):
             loader = UnstructuredExcelLoader(file_path)
+            doc_type = "excel"
         else:
             raise ValueError(f"Unsupported file type: {file_path}")
         
@@ -52,9 +61,12 @@ class RAGService:
         print(len(splits))
         
         # 3. Add Metadata
+        # STRICT MULTI-TENANCY METADATA INJECTION
         for split in splits:
             split.metadata["company_id"] = company_id
             split.metadata["document_id"] = document_id
+            split.metadata["year"] = current_year
+            split.metadata["doc_type"] = doc_type
             
         # 4. Store in Vector DB
         # We need to ensure the collection and connection are set up correctly.
@@ -110,20 +122,23 @@ class RAGService:
 
     @staticmethod
     async def search_documents(company_id: str, query: str, limit: int = 5):
-        print(company_id + " " + query );
-        import psycopg2
+        print(f"Searching for company: {company_id} | Query: {query}")
         
-        # 1. Embed Query
-        query_vector = embeddings.embed_query(query)
-        vector_str = "[" + ",".join(map(str, query_vector)) + "]"
-        
-        conn = psycopg2.connect(settings.DATABASE_URL)
-        cursor = conn.cursor()
-        
-        results = []
         try:
-            # 2. Vector Search with Company Filter
-            # Using <=> operator for Cosine Distance (requires vector extension)
+            import psycopg2
+            
+            # Generate embedding for the query synchronously since we are in an async function
+            # and want to ensure compatibility with synchronous psycopg2 execution
+            # Or use aembed_query to be non-blocking with gemini API
+            if hasattr(embeddings, 'aembed_query'):
+                query_embedding = await embeddings.aembed_query(query)
+            else:
+                query_embedding = embeddings.embed_query(query)
+            
+            conn = psycopg2.connect(settings.DATABASE_URL)
+            cursor = conn.cursor()
+            
+            # Use pgvector <=> operator for cosine distance
             cursor.execute(
                 """
                 SELECT content, metadata
@@ -132,21 +147,23 @@ class RAGService:
                 ORDER BY embedding <=> %s::vector
                 LIMIT %s
                 """,
-                (company_id, vector_str, limit)
+                (company_id, query_embedding, limit)
             )
             
             rows = cursor.fetchall()
+            
+            results = []
             for row in rows:
                 results.append({
                     "content": row[0],
                     "metadata": row[1]
                 })
                 
-        except Exception as e:
-            print(f"Search failed: {e}")
-            raise e
-        finally:
             cursor.close()
             conn.close()
             
-        return results
+            return results
+            
+        except Exception as e:
+            print(f"Search failed: {e}")
+            raise e

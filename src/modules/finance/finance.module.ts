@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Company } from './entities/company.entity';
 import { FinancialStatement } from './entities/financial-statement.entity';
 import { RiskScore } from './entities/risk-score.entity';
+import { RiskScoreHistory } from './entities/risk-score-history.entity';
 import { Alert } from './entities/alert.entity';
 import { RiskEvent } from './entities/risk-event.entity';
 import { CompanyDocument } from './entities/company-document.entity';
@@ -15,10 +16,14 @@ import { RiskProfileService } from './services/risk-profile.service';
 import { RiskProfile } from './entities/risk-profile.entity';
 import { FinanceController } from './finance.controller';
 import { RiskProfileController } from './controllers/risk-profile.controller';
+import { AlertController } from './controllers/alert.controller';
+import { AlertService } from './services/alert.service';
 import { BullModule } from '@nestjs/bull';
 import { AnalysisProcessor } from './queues/analysis.processor';
 import { SchedulerService } from './services/scheduler.service';
-
+import { RiskGateway } from './gateways/risk.gateway';
+import { CompanyService } from './services/company.service';
+import { CompanyController } from './controllers/company.controller';
 
 @Module({
     imports: [
@@ -30,6 +35,7 @@ import { SchedulerService } from './services/scheduler.service';
             Company,
             FinancialStatement,
             RiskScore,
+            RiskScoreHistory,
             Alert,
             RiskEvent,
             CompanyDocument,
@@ -49,8 +55,17 @@ import { SchedulerService } from './services/scheduler.service';
             name: 'risk-analysis-queue',
         }),
     ],
-    controllers: [FinanceController, RiskProfileController],
-    providers: [FinancialCalculatorService, RiskEngineService, RiskProfileService, AnalysisProcessor, SchedulerService],
-    exports: [TypeOrmModule, FinancialCalculatorService, RiskEngineService, RiskProfileService, BullModule], // Export BullModule if other modules need queue
+    controllers: [FinanceController, RiskProfileController, AlertController, CompanyController],
+    providers: [
+        FinancialCalculatorService, 
+        RiskEngineService, 
+        RiskProfileService, 
+        AlertService,
+        AnalysisProcessor, 
+        SchedulerService,
+        RiskGateway,
+        CompanyService
+    ],
+    exports: [TypeOrmModule, FinancialCalculatorService, RiskEngineService, RiskProfileService, AlertService, CompanyService, BullModule], // Export BullModule if other modules need queue
 })
 export class FinanceModule { }

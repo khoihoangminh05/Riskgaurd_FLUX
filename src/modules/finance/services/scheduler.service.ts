@@ -6,6 +6,7 @@ import type { Queue } from 'bull';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Company } from '../entities/company.entity';
+import { RiskEngineService } from './risk-engine.service';
 
 @Injectable()
 export class SchedulerService {
@@ -16,28 +17,25 @@ export class SchedulerService {
         private readonly companyRepo: Repository<Company>,
         @InjectQueue('risk-analysis-queue') // Inject the queue
         private readonly riskQueue: Queue,
+        private readonly riskEngineService: RiskEngineService,
     ) { }
 
     // Run at 8 AM daily
     @Cron('0 8 * * *')
     async handleDailyCron() {
         this.logger.log('Running daily risk analysis scheduler...');
-
         const companies = await this.companyRepo.find();
         this.logger.log(`Found ${companies.length} companies to analyze.`);
 
         for (const company of companies) {
-            // Add job to queue with a small delay to rate limit if needed (logic can be in processor or here)
-            // For simple rate limiting, we can use `delay` option in Bull, but for now let's just queue them.
-            // Bull processes them according to concurrency settings.
-
-            await this.riskQueue.add('daily_scan', {
-                companyId: company.id
-            }, {
-                removeOnComplete: true,
-                attempts: 3,
-                backoff: 5000
-            });
+            // Standardizing the call across scheduler and manual trigger
+            await this.executeRiskAnalysisPipeline(company.id);
         }
+    }
+
+    async executeRiskAnalysisPipeline(companyId: string) {
+        this.logger.log(`Executing Risk Analysis Pipeline for company ${companyId}`);
+        // Calling the core risk engine logic directly to ensure synchronous completion for manual triggers
+        await this.riskEngineService.executeRiskAnalysisPipeline(companyId);
     }
 }
